@@ -29,7 +29,7 @@ except ImportError:
     htmlunescape = HTMLParser().unescape
 
 
-message_header = "# {testname}: {failures} failure(s), {errors} error(s) and {skip} skipped for {tests} tests #"
+message_header = "# {testname}: {failures} failure(s), {errors} error(s) and {skip} skipped for {tests} tests #\n*Build{build} on {timestamp}*"
 message_entry = "* **{status}** {class} / {test}\n```node\n{traceback}\n```"
 message_join_entries = "\n\n"
 message = "{header}\n\n{entries}"
@@ -41,10 +41,13 @@ def format_report(xunitfile):
     testsuite = data.getroot()
     headervars = {
         'testname': args.test,
-        'tests': int(testsuite.get('tests'))
+        'tests': int(testsuite.get('tests')),
+        'build': '' if args.build < 0 else ' %d' % args.build
     }
     for word in ('errors', 'failures', 'skip'):
         headervars[word] = int(testsuite.get(word, 0))
+    headervars['time'] = float(testsuite.get('time', 0))
+    headervars['timestamp'] = testsuite.get('timestamp', 'unknown')
 
     entries = []
     for testcase in testsuite.getchildren():
@@ -73,14 +76,15 @@ def post_comment(content):
 
     # Check if there is any comment from our user
     comment_url = 'https://api.bitbucket.org/1.0/repositories/{accountname}/{repo_slug}/{type}/{id}/comments'.format(**repository)
-    r = requests.get(comment_url, auth=auth)
-    assert r.status_code == 200
-    for comment in r.json():
-        if comment['deleted']: continue
-        if comment['username'] == bitbucket_user:
-            delete_url = 'https://api.bitbucket.org/1.0/repositories/{accountname}/{repo_slug}/{type}/{id}/comments/{comid}'.format(comid=str(comment['comment_id']), **repository)
-            r = requests.delete(delete_url, auth=auth)
-            assert r.status_code == 200
+    if args.delete:
+        r = requests.get(comment_url, auth=auth)
+        assert r.status_code == 200
+        for comment in r.json():
+            if comment['deleted']: continue
+            if comment['username'] == bitbucket_user:
+                delete_url = 'https://api.bitbucket.org/1.0/repositories/{accountname}/{repo_slug}/{type}/{id}/comments/{comid}'.format(comid=str(comment['comment_id']), **repository)
+                r = requests.delete(delete_url, auth=auth)
+                assert r.status_code == 200
 
     r = requests.post(comment_url, auth=auth, data={'content': str(content)})
     assert r.status_code == 200
@@ -96,15 +100,17 @@ if __name__ == '__main__':
     parser.add_argument('-t', '--test', required=True,
         help='The name of the test to use in the comment')
 
-    parser.add_argument('-p', '--password', required=True,
-        help='The bitbucket user password')
     parser.add_argument('-u', '--username', required=True,
         help='The bitbucket user username')
+    parser.add_argument('-p', '--password', required=True,
+        help='The bitbucket user password')
 
     parser.add_argument('-a', '--accountname', required=True,
         help='The bitbucket repository account name')
     parser.add_argument('-r', '--reposlug', required=True,
         help='The bitbucket repository slug')
+    parser.add_argument('-b', '--build', type=int, default=-1,
+        help='The build number')
 
     type_group = parser.add_mutually_exclusive_group(required=True)
     type_group.add_argument('--pullrequest', dest='type',
@@ -116,6 +122,9 @@ if __name__ == '__main__':
 
     parser.add_argument('-i', '--changeid', required=True,
         help='The change id')
+
+    parser.add_argument('-d', '--delete', action='store_true',
+        help='Whether to delete old comments or not')
 
     args = parser.parse_args()
 
