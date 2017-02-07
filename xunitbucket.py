@@ -3,7 +3,6 @@
 
 import argparse
 import requests
-import sys
 
 from lxml import etree
 
@@ -115,5 +114,5 @@ if __name__ == '__main__':
     }
     auth = (args.username, args.password)
 
-    post_comment(format_report(sys.argv[1]))
+    post_comment(format_report(args.xunitfile))
     print('Comment posted.')
