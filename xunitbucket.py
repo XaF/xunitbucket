@@ -1,6 +1,15 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+#
+# xunitbucket - script that allows to read a xunit.xml
+# file, format it in markdown and post it as a comment
+# on bitbucket. All the options needed can be seen by
+# using xunitbucket --help
+#
+# Raphaël Beamonte <raphael.beamonte@bhvr.com>
+#
+
 import argparse
 import requests
 
