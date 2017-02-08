@@ -68,20 +68,22 @@ def format_report(xunitfile):
     return message.format(**messagevars)
 
 def post_comment(content):
-    # Get own username to find own comments
-    user_url = 'https://api.bitbucket.org/2.0/user'
-    r = requests.get(user_url, auth=auth)
-    assert r.status_code == 200
-    bitbucket_user = r.json()['username']
-
     # Check if there is any comment from our user
     comment_url = 'https://api.bitbucket.org/1.0/repositories/{accountname}/{repo_slug}/{type}/{id}/comments'.format(**repository)
     if args.delete:
+        # Get own username
+        user_url = 'https://api.bitbucket.org/2.0/user'
+        r = requests.get(user_url, auth=auth)
+        assert r.status_code == 200
+        bitbucket_user = r.json()['username']
+
+        # Get list of comments on the change
         r = requests.get(comment_url, auth=auth)
         assert r.status_code == 200
         for comment in r.json():
             if comment['deleted']: continue
             if comment['username'] == bitbucket_user:
+                # For each comment matching the username, send a delete request
                 delete_url = 'https://api.bitbucket.org/1.0/repositories/{accountname}/{repo_slug}/{type}/{id}/comments/{comid}'.format(comid=str(comment['comment_id']), **repository)
                 r = requests.delete(delete_url, auth=auth)
                 assert r.status_code == 200
