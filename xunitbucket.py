@@ -29,7 +29,7 @@ except ImportError:
     htmlunescape = HTMLParser().unescape
 
 
-message_header = "# {testname}: {failures} failure(s), {errors} error(s) and {skip} skipped for {tests} tests #\n*Build{build} on {timestamp}*"
+message_header = "# Failed on {testname}: {failures} failure(s), {errors} error(s) and {skip} skipped for {tests} tests #\n*Build{build} on {timestamp}*"
 message_entry = "* **{status}** {class} / {test}\n```node\n{traceback}\n```"
 message_join_entries = "\n\n"
 message = "{header}\n\n{entries}"
