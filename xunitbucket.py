@@ -11,7 +11,10 @@
 #
 
 import argparse
+import os
 import requests
+import sys
+import time
 
 from lxml import etree
 
@@ -29,16 +32,20 @@ except ImportError:
     htmlunescape = HTMLParser().unescape
 
 
-message_header = "# Failed on {testname}: {failures} failure(s), {errors} error(s) and {skip} skipped for {tests} tests #\n*Build{build} on {timestamp}*"
-message_entry = "* **{status}** {class} / {test}\n```node\n{traceback}\n```"
-message_join_entries = "\n\n"
-message = "{header}\n\n{entries}"
+xunit_message_header = "# Failed on {testname}: {failures} failure(s), {errors} error(s) and {skip} skipped for {tests} tests #\n*Build{build} on {timestamp}*"
+xunit_message_entry = "* **{status}** {class} / {test}\n```node\n{traceback}\n```"
+xunit_message_join_entries = "\n\n"
+xunit_message = "{header}\n\n{entries}"
+
+lint_message_header = "# Failed on {testname}: {error_count}#\n*Build{build} on {timestamp}*"
+lint_message_entry_file = "* **{filename}**: {file_error_count}\n{error_entries}\n"
+lint_message_entry_error = "    * **{severity}** on line {line}, column {column}\n```\n{message}\n```"
+lint_message_join_entries_file = "\n\n"
+lint_message_join_entries_error = "\n\n"
+lint_message = "{header}\n\n{file_entries}"
 
 
-def format_report(xunitfile):
-    data = etree.parse(xunitfile)
-
-    testsuite = data.getroot()
+def format_report_xunit(testsuite):
     headervars = {
         'testname': args.test,
         'tests': int(testsuite.get('tests')),
@@ -59,13 +66,66 @@ def format_report(xunitfile):
                 'test': testcase.get('name'),
                 'traceback': htmlunescape(report.text)
             }
-            entries.append(message_entry.format(**entryvars))
+            entries.append(xunit_message_entry.format(**entryvars))
 
     messagevars = {
-        'header': message_header.format(**headervars),
-        'entries': message_join_entries.join(entries)
+        'header': xunit_message_header.format(**headervars),
+        'entries': xunit_message_join_entries.join(entries)
     }
-    return message.format(**messagevars)
+    return xunit_message.format(**messagevars)
+
+
+def format_report_lint(checkstyle):
+    error_count = {}
+    file_entries = []
+
+    for fileelem in checkstyle.findall('file'):
+
+        file_error_count = {}
+        error_entries = []
+
+        for errorelem in fileelem.findall('error'):
+            severity = errorelem.get('severity')
+
+            file_error_count[severity] = file_error_count.get(severity, 0) + 1
+            error_count[severity] = error_count.get(severity, 0) + 1
+
+            error_entryvars = {
+                'line': errorelem.get('line'),
+                'column': errorelem.get('column'),
+                'severity': severity.capitalize(),
+                'message': errorelem.get('message'),
+            }
+            error_entries.append(
+                lint_message_entry_error.format(**error_entryvars))
+
+        file_entryvars = {
+            'filename': fileelem.get('name'),
+            'error_entries': lint_message_join_entries_error.join(error_entries),
+            'file_error_count': ', '.join([
+                '{} {}(s)'.format(v, k)
+                for k, v in file_error_count.items()]),
+        }
+        file_entries.append(
+            lint_message_entry_file.format(**file_entryvars))
+
+    headervars = {
+        'testname': args.test,
+        'build': '' if args.build < 0 else ' %d' % args.build,
+        'timestamp': time.strftime(
+            '%c',
+            time.localtime(os.path.getmtime(args.reportfile))),
+        'error_count': ', '.join([
+            '{} {}(s)'.format(v, k)
+            for k, v in error_count.items()]),
+    }
+
+    messagevars = {
+        'header': lint_message_header.format(**headervars),
+        'file_entries': lint_message_join_entries_file.join(file_entries)
+    }
+    return lint_message.format(**messagevars)
+
 
 def post_comment(content):
     # Check if there is any comment from our user
@@ -95,9 +155,10 @@ def post_comment(content):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description='Submit a well formatted Markdown '
-                    'comment to Bitbucket from a xunit.xml file')
-    parser.add_argument('xunitfile',
-        help='The xunit.xml file to use')
+                    'comment to Bitbucket from a xunit.xml '
+                    'or lint.xml file')
+    parser.add_argument('reportfile',
+        help='The xml file to use')
 
     parser.add_argument('-t', '--test', required=True,
         help='The name of the test to use in the comment')
@@ -138,5 +199,19 @@ if __name__ == '__main__':
     }
     auth = (args.username, args.password)
 
-    post_comment(format_report(args.xunitfile))
+    data = etree.parse(args.reportfile)
+    root = data.getroot()
+
+    if root.tag == 'testsuite':
+        report = format_report_xunit(root)
+    elif root.tag == 'checkstyle':
+        report = format_report_lint(root)
+    else:
+        parser.print_usage()
+        print('{}: error: {}'.format(
+            os.path.basename(__file__),
+            'Unknown XML type (tag = {})'.format(root.tag)))
+        sys.exit(1)
+
+    post_comment(report)
     print('Comment posted.')
