@@ -99,8 +99,12 @@ def format_report_lint(checkstyle):
             error_entries.append(
                 lint_message_entry_error.format(**error_entryvars))
 
+        filename = fileelem.get('name')
+        if args.workspace is not None and filename.startswith(args.workspace):
+            filename = filename[len(args.workspace):]
+
         file_entryvars = {
-            'filename': fileelem.get('name'),
+            'filename': filename,
             'error_entries': lint_message_join_entries_error.join(error_entries),
             'file_error_count': ', '.join([
                 '{} {}(s)'.format(v, k)
@@ -188,6 +192,10 @@ if __name__ == '__main__':
 
     parser.add_argument('-d', '--delete', action='store_true',
         help='Whether to delete old comments or not')
+
+    parser.add_argument('-w', '--workspace',
+        help='The workspace path to remove from the beginning of the '
+             'file path when treating a lint report')
 
     args = parser.parse_args()
 
