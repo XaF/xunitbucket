@@ -99,6 +99,10 @@ def format_report_lint(checkstyle):
             error_entries.append(
                 lint_message_entry_error.format(**error_entryvars))
 
+        # If no error was found for the current file
+        if not file_error_count:
+            continue
+
         filename = fileelem.get('name')
         if args.workspace is not None and filename.startswith(args.workspace):
             filename = filename[len(args.workspace):]
